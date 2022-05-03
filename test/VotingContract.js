@@ -19,6 +19,8 @@ describe("VotingContract", function () {
 
         const votingCreatedEvent = rc.events.find(event => event.event === 'VotingCreated');
         [votingId] = votingCreatedEvent.args;
+        await votingContract.addCandidate(votingId, user1.address);
+        await votingContract.addCandidate(votingId, user2.address);
 
     })
 
@@ -41,6 +43,13 @@ describe("VotingContract", function () {
 
     describe("addVoting", async function () {
 
+        it("Только владелец может добавить кандидата", async function () {
+            await expect(votingContract.connect(user1).addCandidate(votingId, user2.address)).to.be.revertedWith("Only owner!");
+        });
+    });
+
+    describe("addVoting", async function () {
+
         it("Только владелец может создать новое голосование", async function () {
             await expect(votingContract.connect(user1).addVoting("Elections")).to.be.revertedWith("Only owner!");
         });
@@ -49,129 +58,90 @@ describe("VotingContract", function () {
 
             expect(votingId).to.equal(0);
             var response = await votingContract.votingInfo(votingId);
-            expect(response[0]).to.equal(0);
-            expect(response[1]).to.equal("Elections");
-            expect(response[3]).to.equal(true);
-        });
-    });
-
-
-    describe("joinVoting", async function () {
-
-        it("Нельзя присоединится к голосованию после закрытия", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") }); // Some user vote
-            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]); // Add 3 days
-            await votingContract.finishVoting(votingId);
-            await expect(votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("Voting is over!");
-        });
-
-        it("Нельзя присоединится к голосованию без оплаты", async function () {
-            await expect(votingContract.connect(user1).joinVoting(votingId)).to.be.revertedWith("Pay 0.01 ether to participate!");
-        });
-
-        it("Нельзя присоединиться к голосованию если присоединился ранее", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await expect(votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("You joined the voting earlier");
+            expect(response[0]).to.equal("Elections");
+            expect(response[2]).to.equal(true);
         });
     });
 
     describe("vote", async function () {
 
         it("Голосование после закрытия", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") }); // Some user vote
-            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]); // Add 3 days
-            await votingContract.finishVoting(votingId);
-            await expect(votingContract.connect(user1).vote(votingId, user2.address)).to.be.revertedWith("Voting is over!");
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
+            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]);
+            await votingContract.finish(votingId);
+            await expect(votingContract.connect(user1).vote(votingId, user1.address, { value: ethers.utils.parseEther("0.01") })).to.be.revertedWith("Voting is over!");
 
         });
 
-        it("Нельзя проголосовать не присоединившись к голосованию", async function () {
-            await expect(votingContract.connect(user2).vote(votingId, user1.address)).to.be.revertedWith("You are not a voting participant! Please join!");
+        it("Нельзя проголосовать не заплатив 0.01 ether", async function () {
+            await expect(votingContract.connect(user2).vote(votingId, user1.address)).to.be.revertedWith("Pay 0.01 ether to participate!");
         });
 
-        it("Нельзя проголосовать за не участника", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await expect(votingContract.connect(user1).vote(votingId, user2.address)).to.be.revertedWith("There is no such candidate on the list!");
+        it("Нельзя проголосовать за не кандидата", async function () {
+            await expect(votingContract.connect(user1).vote(votingId, users[0].address), { value: ethers.utils.parseEther("0.01") }).to.be.revertedWith("Is not a candidate!");
         });
 
         it("Нельзя проголосовать повторно", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user1).vote(votingId, user2.address);
-            await expect(votingContract.connect(user1).vote(votingId, user1.address)).to.be.revertedWith("You have already cast your vote!");
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
+            await expect(votingContract.connect(user1).vote(votingId, user1.address), { value: ethers.utils.parseEther("0.01") }).to.be.revertedWith("You have already cast your vote!");
         })
 
         it("Проверка состояния после голосования", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user1).vote(votingId, user2.address);
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
 
             expect(votingId).to.equal(0);
             var response = await votingContract.votingInfo(votingId);
-            expect(response[0]).to.equal(0);
-            expect(response[1]).to.equal("Elections");
-            expect(response[3]).to.equal(true);
-            expect(response[4]).to.equal(user2.address);
+            expect(response[0]).to.equal("Elections");
+            expect(response[2]).to.equal(true);
+            expect(response[3]).to.equal(user2.address);
         });
 
         it("Проверка корректности подсчета голосов", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
 
-            for (let i = 0; i < 3; i++) {
-                await votingContract.connect(users[i]).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-                await votingContract.connect(users[i]).vote(votingId, user1.address);
+            for (let i = 0; i < 5; i++) {
+                await votingContract.connect(users[i]).vote(votingId, user1.address, { value: ethers.utils.parseEther("0.01") });
             }
 
-            for (let i = 3; i < 9; i++) {
-                await votingContract.connect(users[i]).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-                await votingContract.connect(users[i]).vote(votingId, user2.address);
-            }
-
-            for (let i = 9; i < 12; i++) {
-                await votingContract.connect(users[i]).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-                await votingContract.connect(users[i]).vote(votingId, users[0].address);
+            for (let i = 5; i < 12; i++) {
+                await votingContract.connect(users[i]).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
             }
             var response = await votingContract.votingInfo(votingId);
-            expect(response[4]).to.equal(user2.address);
-            var array = await votingContract.getParticipants(votingId);
-            expect(array.length).to.equal(14);
+            expect(response[3]).to.equal(user2.address);
+            expect(response[4]).to.equal(12);
 
         });
     });
 
-    describe("finishVoting", async function () {
+    describe("finish", async function () {
 
         it("Закрытие голосования раньше положенного", async function () {
-            await expect(votingContract.finishVoting(votingId)).to.be.revertedWith("Less than three days have passed!");
+            await expect(votingContract.finish(votingId)).to.be.revertedWith("Less than three days have passed!");
         });
 
         it("Закрытие голосования по прошествии положенного срока", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-            await votingContract.connect(user1).vote(votingId, user2.address); // Some user vote
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
 
-            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]); // Add 3 days
+            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]);
 
             var response = await votingContract.votingInfo(votingId);
-            expect(response[3]).to.equal(true)  // Голосование открыто
+            expect(response[2]).to.equal(true)  // Голосование открыто
 
             const leaderInitialBalance = await user2.getBalance();
 
-            await votingContract.finishVoting(votingId);
+            await votingContract.finish(votingId);
 
-            expect(await user2.getBalance() > leaderInitialBalance); // Деньги были успешно переведены лидеру
+            expect(await user2.getBalance() > leaderInitialBalance);
             var response = await votingContract.votingInfo(votingId);
-            expect(await response[3]).to.equal(false);  // голосование закрыто isOpen равно false
+            expect(await response[2]).to.equal(false);
 
         });
 
         it("Повторное закрытие голосования", async function () {
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") }); // Some user vote
-            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]); // Add 3 days
-            await votingContract.finishVoting(votingId);
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
+            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]);
+            await votingContract.finish(votingId);
 
-            expect(votingContract.finishVoting(votingId)).to.be.revertedWith("The voting is already closed!");
+            expect(votingContract.finish(votingId)).to.be.revertedWith("The voting is already closed!");
         });
     });
 
@@ -184,10 +154,10 @@ describe("VotingContract", function () {
         it("Вывод комиссии владельцем", async function () {
             const owner_initial_balance = await owner.getBalance();
 
-            await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") }); // Some user vote
+            await votingContract.connect(user1).vote(votingId, user2.address, { value: ethers.utils.parseEther("0.01") });
 
-            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]); // Add 3 days
-            await votingContract.finishVoting(votingId);
+            await network.provider.send("evm_increaseTime", [60 * 60 * 24 * 3]);
+            await votingContract.finish(votingId);
 
             await votingContract.withDrawCommission();
 
@@ -195,16 +165,4 @@ describe("VotingContract", function () {
 
         });
     });
-
-    describe("getParticipants", async function() {
-
-        it("Вывод участников голосования", async function () {
-        await votingContract.connect(user1).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-        await votingContract.connect(user2).joinVoting(votingId, { value: ethers.utils.parseEther("0.01") });
-        var array = await votingContract.getParticipants(votingId);
-        expect(await array[0]).to.equal(user1.address);
-        expect(await array[1]).to.equal(user2.address);
-        });
-    });
-
 });

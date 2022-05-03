@@ -1,4 +1,4 @@
-const deployedContractAddr = "0x4102Ead442cD689597C4DB07506decd6A338eF6B";
+const deployedContractAddr = "0xDC0857D47eb7B9D3cfa27E225987B9C62204dcF7";
 
 task("deploy", "Развертывает контракт в сети").setAction(async () => {
     const [deployer] = await ethers.getSigners();
@@ -19,7 +19,6 @@ task("addVoting", "Creates a new voting")
     const votingContract = await VotingContract.attach(deployedContractAddr);
     const votingTransaction = await votingContract.addVoting(args['name']);
     const rc = await votingTransaction.wait();
-
     const votingCreatedEvent = rc.events.find(event => event.event === 'VotingCreated');
     const [_id] = votingCreatedEvent.args;
 
@@ -34,14 +33,15 @@ task("withDrawCommission", "Withdraws commission").setAction(async () => {
     console.log('Commission successfully withdrawed');
 });
 
-task("joinVoting", "Join the voting")
+task("addCandidate", "added candidate")
     .addParam("votingId", "Voting to vote id")
+    .addParam("candidate", "adding a candidate to the vote")
     .setAction(async (args) => {
         const VotingContract = await ethers.getContractFactory("VotingContract");
         const votingContract = await VotingContract.attach(deployedContractAddr);
-        const transaction = await votingContract.vote(args['votingId'], { value: ethers.utils.parseEther("0.01") });
+        const transaction = await votingContract.addCandidate(args['votingId'], args['candidate']);
         await transaction.wait();
-        console.log(`Successfully joined`);
+        console.log(`Successfully added`);
     });
 
 task("vote", "Vote to a specific voting")
@@ -56,23 +56,14 @@ task("vote", "Vote to a specific voting")
     });
 
 
-task("finishVoting", "Vote to the specific voting")
+task("finish", "Vote to the specific voting")
     .addParam("votingId", "Voting to vote id")
     .setAction(async (args) => {
         const VotingContract = await ethers.getContractFactory("VotingContract");
         const votingContract = await VotingContract.attach(deployedContractAddr);
-        const transaction = await votingContract.finishVoting(args['votingId']);
+        const transaction = await votingContract.finish(args['votingId']);
         await transaction.wait();
         console.log('Successfully closed');
-    });
-
-task("getParticipants", "Shows the list of voting participants")
-    .addParam("votingId", "Voting to vote id")
-    .setAction(async (args) => {
-        const VotingContract = await ethers.getContractFactory("VotingContract");
-        const votingContract = await VotingContract.attach(deployedContractAddr);
-        const array = await votingContract.getParticipants(args['votingId']);
-        console.log(`List participants: ${array}`);
     });
 
 
@@ -83,10 +74,11 @@ task("votingInfo", "Shows the information of a specific voting")
         const votingContract = await VotingContract.attach(deployedContractAddr);
         const response = await votingContract.votingInfo(args['votingId']);
 
-        const nameVote = response[1];
-        const endDate = new Date(response[2] * 1000);
-        const isOpen = response[3];
-        const leader = response[4];
+        const nameVote = response[0];
+        const endDate = new Date(response[1] * 1000);
+        const isOpen = response[2];
+        const leader = response[3];
+        const numberVoters = response[4];
 
-        console.log(`Voting info:\nname of the vote: ${response}\nDate end: ${endDate}\nIs open: ${isOpen}\nLeader: ${leader}`);
+        console.log(`Voting info:\nname of the vote: ${response}\nDate end: ${endDate}\nIs open: ${isOpen}\nLeader: ${leader}\nNumber voters: ${numberVoters}`);
     });
