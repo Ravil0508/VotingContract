@@ -14,14 +14,11 @@ describe("VotingContract", function () {
         VotingContract = await ethers.getContractFactory("VotingContract");
         [owner, user1, user2, ...users] = await ethers.getSigners();
         votingContract = await VotingContract.deploy();
-        const votingTransaction = await votingContract.addVoting("Elections");
+        const votingTransaction = await votingContract.addVoting("Elections", [user1.address,user2.address]);
         const rc = await votingTransaction.wait();
 
         const votingCreatedEvent = rc.events.find(event => event.event === 'VotingCreated');
         [votingId] = votingCreatedEvent.args;
-        await votingContract.addCandidate(votingId, user1.address);
-        await votingContract.addCandidate(votingId, user2.address);
-
     })
 
     describe("VotingContract", function () {
@@ -31,7 +28,7 @@ describe("VotingContract", function () {
         })
 
         it("Проверка уникальности idVoting", async function () {
-            const voting2Transaction = await votingContract.addVoting("Elections2");
+            const voting2Transaction = await votingContract.addVoting("Elections2", [user1.address, user2.address]);
             const rc2 = await voting2Transaction.wait();
     
             const voting2CreatedEvent = rc2.events.find(event => event.event === 'VotingCreated');
@@ -43,15 +40,8 @@ describe("VotingContract", function () {
 
     describe("addVoting", async function () {
 
-        it("Только владелец может добавить кандидата", async function () {
-            await expect(votingContract.connect(user1).addCandidate(votingId, user2.address)).to.be.revertedWith("Only owner!");
-        });
-    });
-
-    describe("addVoting", async function () {
-
         it("Только владелец может создать новое голосование", async function () {
-            await expect(votingContract.connect(user1).addVoting("Elections")).to.be.revertedWith("Only owner!");
+            await expect(votingContract.connect(user1).addVoting("Elections",[user2.address, owner.address])).to.be.revertedWith("Only owner!");
         });
 
         it("Проверка инициализированного состояния", async function () {

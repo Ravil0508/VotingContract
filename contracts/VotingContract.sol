@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.7.0 <0.9.0;
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract VotingContract {
+
+  using SafeMath for uint256;
 
   address payable public owner;
   uint private commissionCounter;
@@ -34,13 +38,7 @@ contract VotingContract {
     owner = payable(msg.sender);
   }
 
-    function addCandidate (uint votingId, address candidate) public {
-        require(msg.sender == owner, "Only owner!");
-        voting[votingId].candidates[candidate].isCandidate = true;
-        voting[votingId].candidates[candidate].countVote = 0;
-    }
-
-    function addVoting(string memory _name) public returns(uint _id){
+    function addVoting(string memory _name, address[] memory candidats) public returns(uint _id){
       require(msg.sender == owner, "Only owner!");
       _id = votingNumber;
       Voting storage votingObj = voting[_id];     
@@ -49,7 +47,11 @@ contract VotingContract {
       votingObj.isOpen = true;
       votingObj.countVote = 0;
       votingObj.numberVoters = 0;
-      votingNumber++;
+      for(uint i = 0; i < candidats.length; i++) {
+        votingObj.candidates[candidats[i]].countVote = 0;
+        votingObj.candidates[candidats[i]].isCandidate = true;
+      }
+      votingNumber = votingNumber.add(1);
       emit VotingCreated(_id);
     }
 
@@ -57,11 +59,12 @@ contract VotingContract {
       require(voting[_idVoting].isOpen, "Voting is over!");
       require(voting[_idVoting].candidates[_elected].isCandidate, "Is not a candidate!");
       require(!voting[_idVoting].voters[msg.sender].isVoted, "You have already cast your vote!");
-      require(msg.value == 0.01 ether, "Pay 0.01 ether to participate!");
+      require(msg.value == 0.01 ether, "Pay 0.01 ether to participate!");// здесь поменял
 
       voting[_idVoting].voters[msg.sender].isVoted = true;
-      voting[_idVoting].candidates[_elected].countVote++;
-      voting[_idVoting].numberVoters++;
+      voting[_idVoting].candidates[_elected].countVote = voting[_idVoting].candidates[_elected].countVote.add(1);
+      voting[_idVoting].numberVoters = voting[_idVoting].numberVoters.add(1);
+      commissionCounter = commissionCounter.add(0.001 ether);
 
       if(voting[_idVoting].candidates[_elected].countVote > voting[_idVoting].countVote){
         voting[_idVoting].countVote = voting[_idVoting].candidates[_elected].countVote;
@@ -72,7 +75,7 @@ contract VotingContract {
       require(voting[_idVoting].isOpen, "The voting is already closed!");
       require(voting[_idVoting].endDate < block.timestamp, "Less than three days have passed!");
       voting[_idVoting].isOpen = false;
-      payable(voting[_idVoting].winner).transfer((address(this).balance - commissionCounter));
+      payable(voting[_idVoting].winner).transfer((address(this).balance.sub(commissionCounter)));
     }
 
     function withDrawCommission() public {
